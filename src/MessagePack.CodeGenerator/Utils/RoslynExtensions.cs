@@ -17,49 +17,18 @@ namespace MessagePack.CodeGenerator
     {
         public static async Task<Compilation> GetCompilationFromProject(string csprojPath, params string[] preprocessorSymbols)
         {
-            // fucking workaround of resolve reference...
-            var externalReferences = new List<PortableExecutableReference>();
-            {
-                var locations = new List<string>();
-                locations.Add(typeof(object).Assembly.Location); // mscorlib
-                locations.Add(typeof(System.Linq.Enumerable).Assembly.Location); // core
-
-                var xElem = XElement.Load(csprojPath);
-                var ns = xElem.Name.Namespace;
-
-                var csProjRoot = Path.GetDirectoryName(csprojPath);
-                var framworkRoot = Path.GetDirectoryName(typeof(object).Assembly.Location);
-
-                foreach (var item in xElem.Descendants(ns + "Reference"))
-                {
-                    var hintPath = item.Element(ns + "HintPath")?.Value;
-                    if (hintPath == null)
-                    {
-                        var path = Path.Combine(framworkRoot, item.Attribute("Include").Value + ".dll");
-                        locations.Add(path);
-                    }
-                    else
-                    {
-                        locations.Add(Path.Combine(csProjRoot, hintPath));
-                    }
-                }
-
-                foreach (var item in locations.Distinct())
-                {
-                    if (File.Exists(item))
-                    {
-                        externalReferences.Add(MetadataReference.CreateFromFile(item));
-                    }
-                }
-            }
-
             EnvironmentHelper.Setup();
 
             var workspace = MSBuildWorkspace.Create();
             workspace.WorkspaceFailed += Workspace_WorkspaceFailed;
+            var requiredExternalReferences = DetermineExternalReferences(csprojPath);
 
             var project = await workspace.OpenProjectAsync(csprojPath).ConfigureAwait(false);
-            project = project.AddMetadataReferences(externalReferences); // workaround:)
+            if (requiredExternalReferences != null)
+            {
+                project = project.AddMetadataReferences(requiredExternalReferences); // workaround:)
+            }
+
             project = project.WithParseOptions((project.ParseOptions as CSharpParseOptions).WithPreprocessorSymbols(preprocessorSymbols));
 
             var compilation = await project.GetCompilationAsync().ConfigureAwait(false);
@@ -71,6 +40,81 @@ namespace MessagePack.CodeGenerator
             Console.WriteLine(e.Diagnostic.ToString());
             // throw new Exception(e.Diagnostic.ToString());
         }
+
+        private static IEnumerable<PortableExecutableReference> DetermineExternalReferences(string csprojPath)
+        {
+            // fucking workaround of resolve reference... (for netfx)
+
+            var xElem = XElement.Load(csprojPath);
+            var ns = xElem.Name.Namespace;
+
+            // Skip the .NET Standard and Core projects to prevent the issue: https://github.com/neuecc/MessagePack-CSharp/issues/188
+            var targetFrameworks = PickProjectsTargetFramework(xElem, ns).ToArray();
+            if (1 < targetFrameworks.Length)
+            {
+                throw new NotImplementedException("Portable project has not been supported yet.");
+            }
+            if (targetFrameworks.FirstOrDefault(s => s.StartsWith("netstandard") || s.StartsWith("netcoreapp")) != null)
+            {
+                return null;
+            }
+
+            var externalReferences = new List<PortableExecutableReference>();
+
+            var locations = new List<string>();
+            locations.Add(typeof(object).Assembly.Location); // mscorlib
+            locations.Add(typeof(System.Linq.Enumerable).Assembly.Location); // core
+
+            var csProjRoot = Path.GetDirectoryName(csprojPath);
+            var framworkRoot = Path.GetDirectoryName(typeof(object).Assembly.Location);
+
+            foreach (var item in xElem.Descendants(ns + "Reference"))
+            {
+                var hintPath = item.Element(ns + "HintPath")?.Value;
+                if (hintPath == null)
+                {
+                    var path = Path.Combine(framworkRoot, item.Attribute("Include").Value + ".dll");
+                    locations.Add(path);
+                }
+                else
+                {
+                    locations.Add(Path.Combine(csProjRoot, hintPath));
+                }
+            }
+
+            foreach (var item in locations.Distinct())
+            {
+                if (File.Exists(item))
+                {
+                    externalReferences.Add(MetadataReference.CreateFromFile(item));
+                }
+            }
+
+            return externalReferences;
+        }
+
+        private static IEnumerable<string> PickProjectsTargetFramework(XContainer csProjFile, XNamespace ns)
+        {
+            string[] targets;
+            
+            var multipleSpec = csProjFile.Descendants(ns + "TargetFrameworks").FirstOrDefault();
+            if (multipleSpec != null)
+            {
+                targets = multipleSpec.Value.Split(';');
+            }
+            else
+            {
+                var s = csProjFile.Descendants(ns + "TargetFramework").FirstOrDefault()?.Value;
+                if (s == null)
+                {
+                    throw new ArgumentException("The csproj file is broken. It has no valid TargetFramework element.", nameof(csProjFile));
+                }
+                targets = new[]{s};
+            }
+
+            return targets.Select(s => s.Trim());
+        }
+
 
         public static IEnumerable<INamedTypeSymbol> GetNamedTypeSymbols(this Compilation compilation)
         {
