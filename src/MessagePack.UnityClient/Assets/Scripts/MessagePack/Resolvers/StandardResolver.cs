@@ -289,17 +289,17 @@ namespace MessagePack.Internal
             MessagePack.Unity.UnityResolver.Instance,
 #endif
 
-#if !ENABLE_IL2CPP && !NET_STANDARD_2_0
-            DynamicEnumResolver.Instance, // Try Enum
-#endif
-
-#if !ENABLE_IL2CPP
-            DynamicGenericResolver.Instance, // Try Array, Tuple, Collection, Enum(Generic Fallback)
-#endif
-
-#if !ENABLE_IL2CPP && !NET_STANDARD_2_0
-            DynamicUnionResolver.Instance, // Try Union(Interface)
-#endif
+// #if !ENABLE_IL2CPP && !NET_STANDARD_2_0
+//             DynamicEnumResolver.Instance, // Try Enum
+// #endif
+//
+// #if !ENABLE_IL2CPP
+//             DynamicGenericResolver.Instance, // Try Array, Tuple, Collection, Enum(Generic Fallback)
+// #endif
+//
+// #if !ENABLE_IL2CPP && !NET_STANDARD_2_0
+//             DynamicUnionResolver.Instance, // Try Union(Interface)
+// #endif
         };
     }
 }
