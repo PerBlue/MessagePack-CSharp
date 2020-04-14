@@ -27,9 +27,9 @@ namespace MessagePack.Resolvers
 
         private static readonly IFormatterResolver[] Resolvers = StandardResolverHelper.DefaultResolvers.Concat(new IFormatterResolver[]
         {
-#if !ENABLE_IL2CPP && !NET_STANDARD_2_0
-            DynamicObjectResolver.Instance, // Try Object
-#endif
+// #if !ENABLE_IL2CPP && !NET_STANDARD_2_0
+//             DynamicObjectResolver.Instance, // Try Object
+// #endif
         }).ToArray();
 
         static StandardResolver()
@@ -56,11 +56,11 @@ namespace MessagePack.Resolvers
                 if (typeof(T) == typeof(object))
                 {
                     // final fallback
-#if !ENABLE_IL2CPP
-                    Formatter = (IMessagePackFormatter<T>)DynamicObjectTypeFallbackFormatter.Instance;
-#else
+// #if !ENABLE_IL2CPP
+//                     Formatter = (IMessagePackFormatter<T>)DynamicObjectTypeFallbackFormatter.Instance;
+// #else
                     Formatter = PrimitiveObjectResolver.Instance.GetFormatter<T>();
-#endif
+// #endif
                 }
                 else
                 {
